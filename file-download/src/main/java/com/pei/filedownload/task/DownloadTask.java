@@ -2,6 +2,7 @@ package com.pei.filedownload.task;
 
 
 import android.content.Context;
+import android.text.TextUtils;
 
 import androidx.annotation.NonNull;
 

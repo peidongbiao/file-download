@@ -3,6 +3,7 @@ package com.pei.filedownload;
 import android.content.Context;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
+import android.net.Uri;
 import android.webkit.MimeTypeMap;
 
 import androidx.annotation.NonNull;
@@ -115,5 +116,10 @@ public class Utils {
         }
         // 目录此时为空，可以删除
         return dir.delete();
+    }
+
+
+    public static String parseFileName(String url) {
+        return Uri.parse(url).getLastPathSegment();
     }
 }
