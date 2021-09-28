@@ -35,6 +35,9 @@ public class MainActivity extends AppCompatActivity {
         mDownloadDir = new File(getExternalCacheDir(), "download");
         mDownloadDir.mkdirs();
 
+        mBinding.etDownloadUrl.setText("https://download-cdn.jetbrains.com/idea/ideaIC-2021.2.2.dmg");
+        mBinding.etDownloadUrl.setSelection(mBinding.etDownloadUrl.getText().length());
+
         mBinding.btnDownload.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {

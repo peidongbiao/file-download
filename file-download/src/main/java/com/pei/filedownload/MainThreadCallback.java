@@ -74,7 +74,7 @@ public class MainThreadCallback<T> implements Task.Callback<T>, Handler.Callback
             case CALLBACK_PROGRESS: {
                 Task.Progress progress = (Task.Progress) msg.obj;
                 mCallback.onProgressChange(progress);
-                Task.Progress.releaseProgress(progress);
+                Task.Progress.release(progress);
                 break;
             }
 

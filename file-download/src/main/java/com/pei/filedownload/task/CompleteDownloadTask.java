@@ -99,7 +99,7 @@ class CompleteDownloadTask extends Task<File> {
             update += read;
             int currentPercent = (int) (length * 100 / mInfo.getContentLength());
             if (currentPercent - percent >= 1) {
-                Progress progress = Progress.acquireProgress();
+                Progress progress = Progress.obtain();
                 progress.setTotal(mInfo.getContentLength());
                 progress.setCurrent(length);
                 progress.setPercent(currentPercent);

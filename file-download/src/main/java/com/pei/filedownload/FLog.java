@@ -28,12 +28,21 @@ public class FLog {
         }
     }
 
+    public static void w(String msg, Throwable tr) {
+        if (sLoggable && msg != null) {
+            Log.w(TAG, msg, tr);
+        }
+    }
+
     public static void e(String msg) {
-        if (msg != null)
+        if (sLoggable && msg != null) {
             Log.e(TAG, msg);
+        }
     }
 
     public static void e(String msg, Throwable tr) {
-        Log.e(TAG, msg, tr);
+        if (sLoggable && msg != null) {
+            Log.e(TAG, msg, tr);
+        }
     }
 }

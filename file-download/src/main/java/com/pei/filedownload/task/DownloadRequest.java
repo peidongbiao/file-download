@@ -18,13 +18,13 @@ public class DownloadRequest {
 
     private String url;
     private String target;
-    private String targetDir;
     private String fileName;
     private String requestId;
     private Task.Callback<File> callback;
     private Map<String, String> headers;
     private int parallelNum;
     private int priority;
+    private boolean noSplit;
 
     public DownloadRequest() {
 
@@ -34,12 +34,12 @@ public class DownloadRequest {
         this.fileName = builder.fileName;
         this.url = builder.url;
         this.target = builder.target;
-        this.targetDir = builder.targetDir;
         this.requestId = builder.requestId;
         this.callback = builder.mCallback;
         this.headers = builder.headers;
         this.parallelNum = builder.parallelNum;
         this.priority = builder.priority;
+        this.noSplit = builder.noSplit;
     }
 
     public String getFileName() {
@@ -106,6 +106,13 @@ public class DownloadRequest {
         this.priority = priority;
     }
 
+    public boolean isNoSplit() {
+        return noSplit;
+    }
+
+    public void setNoSplit(boolean noSplit) {
+        this.noSplit = noSplit;
+    }
 
     @Override
     public String toString() {
@@ -127,12 +134,12 @@ public class DownloadRequest {
         private String fileName;
         private String url;
         private String target;
-        private String targetDir;
         private Task.Callback<File> mCallback;
         private String requestId;
         private Map<String, String> headers;
         private int parallelNum;
         private int priority;
+        private boolean noSplit;
 
         public Builder() {
         }
@@ -153,11 +160,6 @@ public class DownloadRequest {
 
         public Builder setTarget(String target) {
             this.target = target;
-            return this;
-        }
-
-        public Builder setTargetDir(String targetDir) {
-            this.targetDir = targetDir;
             return this;
         }
 
@@ -207,6 +209,15 @@ public class DownloadRequest {
 
         public Builder setPriority(int priority) {
             this.priority = priority;
+            return this;
+        }
+
+        public boolean isNoSplit() {
+            return noSplit;
+        }
+
+        public Builder setNoSplit(boolean noSplit) {
+            this.noSplit = noSplit;
             return this;
         }
 

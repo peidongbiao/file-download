@@ -11,6 +11,9 @@ import java.util.concurrent.TimeUnit;
 
 import okhttp3.OkHttpClient;
 
+/**
+ * @author peidongbiao
+ */
 public class FileDownloadManager {
 
     private static final int MAX_PARALLEL_DOWNLOAD_NUM = 3;

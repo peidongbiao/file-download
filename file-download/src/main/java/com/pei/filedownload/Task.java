@@ -30,6 +30,8 @@ public abstract class Task<T> implements Runnable, Comparable<Task<?>> {
     @IntDef({STATUS_INIT, STATUS_ENQUEUE, STATUS_RUNNING, STATUS_PAUSED, STATUS_CANCELED, STATUS_COMPLETE, STATUS_FAILED})
     public @interface TaskStatus {}
 
+
+
     private String mTaskId;
     private List<Callback<T>> mCallbacks;
     protected TaskDispatcher mTaskDispatcher;
@@ -38,6 +40,19 @@ public abstract class Task<T> implements Runnable, Comparable<Task<?>> {
     protected int mPriority = 0;
 
     private AtomicInteger mStatus;
+
+    public static String statusToString(@TaskStatus int status) {
+        switch (status) {
+            case STATUS_INIT: return "INIT";
+            case STATUS_ENQUEUE: return "ENQUEUE";
+            case STATUS_RUNNING: return "RUNNING";
+            case STATUS_PAUSED: return  "PAUSED";
+            case STATUS_CANCELED: return "CANCELED";
+            case STATUS_COMPLETE: return  "COMPLETE";
+            case STATUS_FAILED: return "FAILED";
+        }
+        return "UNKNOWN_STATUS";
+    }
 
     public Task(OkHttpClient okHttpClient, TaskDispatcher taskDispatcher) {
         mOkHttpClient = okHttpClient;
@@ -61,7 +76,7 @@ public abstract class Task<T> implements Runnable, Comparable<Task<?>> {
         for (int i = 0; i < mCallbacks.size(); i++) {
             mCallbacks.get(i).onProgressChange(progress);
         }
-        Progress.releaseProgress(progress);
+        Progress.release(progress);
     }
 
     protected void onPause() {
@@ -172,7 +187,7 @@ public abstract class Task<T> implements Runnable, Comparable<Task<?>> {
         private int percent;
 
         public static Progress complete(long length) {
-            Progress progress = acquireProgress();
+            Progress progress = obtain();
             progress.setTotal(length);
             progress.setCurrent(length);
             progress.setUpdate(length);
@@ -181,7 +196,7 @@ public abstract class Task<T> implements Runnable, Comparable<Task<?>> {
         }
         
         public static Progress copy(Progress progress) {
-            Progress p = acquireProgress();
+            Progress p = obtain();
             p.setTotal(progress.getTotal());
             p.setCurrent(progress.getCurrent());
             p.setUpdate(progress.getUpdate());
@@ -225,13 +240,13 @@ public abstract class Task<T> implements Runnable, Comparable<Task<?>> {
             this.update = update;
         }
 
-        public static Progress acquireProgress() {
+        public static Progress obtain() {
             Progress progress = sProgressPool.acquire();
             progress = progress == null ? new Progress() : progress;
             return progress;
         }
 
-        public static void releaseProgress(Progress progress) {
+        public static void release(Progress progress) {
             progress.current = 0;
             progress.percent = 0;
             progress.total = 0;

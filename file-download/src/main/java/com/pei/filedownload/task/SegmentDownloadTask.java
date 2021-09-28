@@ -1,10 +1,13 @@
 package com.pei.filedownload.task;
 
+import androidx.annotation.NonNull;
+
 import com.pei.filedownload.FLog;
 import com.pei.filedownload.FileDownloadManager;
 import com.pei.filedownload.Segment;
 import com.pei.filedownload.Task;
 import com.pei.filedownload.db.FileTransferDao;
+import com.pei.filedownload.exception.DownloadException;
 import com.pei.filedownload.task.model.DownloadSegment;
 
 import java.io.BufferedInputStream;
@@ -38,6 +41,7 @@ public class SegmentDownloadTask extends Task<DownloadSegment> {
     @Override
     public void run() {
         setStatus(Task.STATUS_RUNNING);
+        mSegment.setStatus(Segment.STATUS_RUNNING);
 
         File segmentFile = new File(mSegment.getTarget() + DownloadTask.DOWNLOAD_SUFFIX,  mSegment.getTargetFile().getName() + "-" + mSegment.getNumber());
 
@@ -45,23 +49,25 @@ public class SegmentDownloadTask extends Task<DownloadSegment> {
             onStart();
             DownloadSegment localSegment = mDao.findDownloadSegment(mSegment.getTaskId(), mSegment.getNumber());
 
-            //当前分片已经下载完成
-            if (mSegment.equals(localSegment) && localSegment.getStatus() == Segment.STATUS_COMPLETE) {
-                if (segmentFile.length() == mSegment.getSegmentLength()) {
-                    mSegment.setSegmentFile(segmentFile);
-                    mSegment.setSegmentPath(segmentFile.getPath());
+            if (mSegment.equals(localSegment)) {
+                if (localSegment.getStatus() == Segment.STATUS_COMPLETE) {
+                    //当前分片已经下载完成
+                    if (segmentFile.length() == mSegment.getSegmentLength()) {
+                        mSegment.setSegmentFile(segmentFile);
+                        mSegment.setSegmentPath(segmentFile.getPath());
 
-                    Progress progress = Progress.complete(mSegment.getSegmentLength());
-                    onProgressChanged(progress);
+                        Progress progress = Progress.complete(mSegment.getSegmentLength());
+                        onProgressChanged(progress);
 
-                    mSegment.setStatus(Segment.STATUS_COMPLETE);
-                    setStatus(Task.STATUS_COMPLETE);
-                    onComplete(mSegment);
-                    return;
+                        onComplete(mSegment);
+                        return;
+                    } else {
+                        segmentFile.delete();
+                    }
+                } else {
+                    //canceled, paused, failed
                 }
-            }
-
-            if (segmentFile.exists() && segmentFile.length() > mSegment.getSegmentLength()) {
+            } else if (segmentFile.exists()) {
                 segmentFile.delete();
             }
 
@@ -80,24 +86,19 @@ public class SegmentDownloadTask extends Task<DownloadSegment> {
             if (status == Task.STATUS_RUNNING) {
                 long length = segmentFile.length();
                 if (mSegment.getSegmentLength() == length) {
-                    setStatus(Task.STATUS_COMPLETE);
-                    mSegment.setStatus(Segment.STATUS_COMPLETE);
-                    mDao.updateDownloadSegmentStatus(mSegment, Segment.STATUS_COMPLETE);
                     onComplete(mSegment);
                 } else {
                     String error = "Download segment " + mSegment.getNumber() + " failed, expect length: " + length + ", actual: " + segmentFile.length();
                     FLog.e(error);
-                    onFailure(new Exception(error));
+                    onFailure(new DownloadException(error));
                 }
             } else if (status == Task.STATUS_CANCELED) {
-                onFailure(new Exception("Canceled"));
+                onFailure(new DownloadException("Canceled"));
             } else if (status == Task.STATUS_PAUSED) {
                 onPause();
             }
         } catch (Exception e) {
             FLog.e("Segment " + mSegment.getNumber() + " download failed", e);
-            setStatus(Task.STATUS_FAILED);
-            mDao.updateDownloadSegmentStatus(mSegment, Segment.STATUS_FAILED);
             onFailure(e);
         } finally {
             mCountDownLatch.countDown();
@@ -112,11 +113,6 @@ public class SegmentDownloadTask extends Task<DownloadSegment> {
                 .get()
                 .url(mSegment.getUrl())
                 .addHeader("RANGE", "bytes=" + (mSegment.getOffset() + downloadedLength) + "-" + (mSegment.getOffset() + mSegment.getSegmentLength() - 1));
-//                .addHeader(HttpManager.HEADER_KEY_CONNECT_TIMEOUT, String.valueOf(DownloadTask.SEGMENT_DOWNLOAD_TIMEOUT))
-//                .addHeader(HttpManager.HEADER_KEY_WRITE_TIMEOUT, String.valueOf(DownloadTask.SEGMENT_DOWNLOAD_TIMEOUT))
-//                .addHeader(HttpManager.HEADER_KEY_READ_TIMEOUT, String.valueOf(DownloadTask.SEGMENT_DOWNLOAD_TIMEOUT))
-//                //不记录body
-//                .addHeader(HttpFileLogInterceptor.HEADER_IGNORE_RESPONSE_BODY, "true");
         if (request.getHeaders() != null) {
             for (Map.Entry<String, String> entry : request.getHeaders().entrySet()) {
                 builder.addHeader(entry.getKey(), entry.getValue());
@@ -130,8 +126,8 @@ public class SegmentDownloadTask extends Task<DownloadSegment> {
         BufferedInputStream bis = new BufferedInputStream(response.body().byteStream());
         byte[] buffer = new byte[4096];
         long length = downloadedLength;
-        long update = downloadedLength;
         long percent = downloadedLength * 100 / segmentLength;
+        long update = mSegment.isLocalSizeUpdated() ? 0 : downloadedLength;
         int read;
         while ((read = bis.read(buffer)) != -1 && getStatus() == Task.STATUS_RUNNING) {
             raf.write(buffer, 0, read);
@@ -139,7 +135,7 @@ public class SegmentDownloadTask extends Task<DownloadSegment> {
             update += read;
             int currentPercent = (int) (length * 100 / segmentLength);
             if (currentPercent - percent >= 1) {
-                Progress progress = Progress.acquireProgress();
+                Progress progress = Progress.obtain();
                 progress.setTotal(segmentLength);
                 progress.setCurrent(length);
                 progress.setPercent(currentPercent);
@@ -147,13 +143,40 @@ public class SegmentDownloadTask extends Task<DownloadSegment> {
                 onProgressChanged(progress);
                 percent = currentPercent;
                 update = 0;
+
+                if (!mSegment.isLocalSizeUpdated()) {
+                    mSegment.setLocalSizeUpdated(true);
+                }
             }
         }
         raf.close();
         bis.close();
 
         FLog.i("doDownload, segment no: " + mSegment.getNumber() + ", segment length: " + segmentLength + ", file length: " + segmentFile.length());
+    }
 
+    @Override
+    protected void onComplete(@NonNull DownloadSegment result) {
+        setStatus(Task.STATUS_COMPLETE);
+        mSegment.setStatus(Segment.STATUS_COMPLETE);
+        mDao.updateDownloadSegmentStatus(mSegment, Segment.STATUS_COMPLETE);
+        super.onComplete(result);
+    }
+
+    @Override
+    protected void onFailure(@NonNull Exception e) {
+        setStatus(Task.STATUS_FAILED);
+        mSegment.setStatus(Segment.STATUS_FAILED);
+        mDao.updateDownloadSegmentStatus(mSegment, Segment.STATUS_FAILED);
+        super.onFailure(e);
+    }
+
+    @Override
+    protected void onPause() {
+        setStatus(Task.STATUS_PAUSED);
+        mSegment.setStatus(Segment.STATUS_FAILED);
+        mDao.updateDownloadSegmentStatus(mSegment, Segment.STATUS_FAILED);
+        super.onPause();
     }
 
     @Override

@@ -4,6 +4,8 @@ import android.content.Context;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.net.Uri;
+import android.os.Environment;
+import android.os.StatFs;
 import android.webkit.MimeTypeMap;
 
 import androidx.annotation.NonNull;
@@ -121,5 +123,17 @@ public class Utils {
 
     public static String parseFileName(String url) {
         return Uri.parse(url).getLastPathSegment();
+    }
+
+
+    /**
+     * 获取磁盘剩余空间
+     * @return available bytes
+     */
+    public static long getFreeDiskSpace() {
+        StatFs statFs = new StatFs(Environment.getExternalStorageDirectory().getPath());
+        long bytesAvailable = statFs.getBlockSizeLong() * statFs.getAvailableBlocksLong();
+        //return bytesAvailable / (1024f * 1024f);
+        return bytesAvailable;
     }
 }

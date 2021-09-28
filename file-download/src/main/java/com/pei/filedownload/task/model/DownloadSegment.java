@@ -18,6 +18,7 @@ public class DownloadSegment extends Segment {
     private File targetFile;
     private File segmentFile;
     private int progress;
+    private boolean localSizeUpdated;
 
     public String getTaskId() {
         return taskId;
@@ -81,12 +82,22 @@ public class DownloadSegment extends Segment {
         return Objects.hash(this.getTaskId(), this.getUrl(), this.getNumber());
     }
 
+    public boolean isLocalSizeUpdated() {
+        return localSizeUpdated;
+    }
+
+    public void setLocalSizeUpdated(boolean localSizeUpdated) {
+        this.localSizeUpdated = localSizeUpdated;
+    }
+
     @Override
     public boolean equals(@Nullable Object obj) {
         if (!(obj instanceof DownloadSegment)) return false;
         DownloadSegment other = (DownloadSegment) obj;
         return Objects.equals(this.getTaskId(), other.getTaskId()) &&
+                Objects.equals(this.getNumber(), other.getNumber()) &&
                 Objects.equals(this.getUrl(), other.getUrl()) &&
-                Objects.equals(this.getNumber(), other.getNumber());
+                Objects.equals(this.getOffset(), other.getOffset()) &&
+                Objects.equals(this.getSegmentLength(), other.getSegmentLength());
     }
 }
