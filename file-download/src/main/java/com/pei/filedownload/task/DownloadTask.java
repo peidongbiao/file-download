@@ -41,6 +41,7 @@ import okhttp3.ResponseBody;
 
 /**
  * 文件下载任务，可以自动判断是否分片下载
+ * @author peidongbiao
  */
 public class DownloadTask extends Task<File> {
     private static final String TAG = "DownloadTask";
@@ -109,7 +110,7 @@ public class DownloadTask extends Task<File> {
             }
 
             long freeDiskSpace = Utils.getFreeDiskSpace();
-            if (mLocalDownloadTaskModel == null && freeDiskSpace != 0 && freeDiskSpace < info.getContentLength()) {
+            if (mLocalDownloadTaskModel == null && freeDiskSpace != 0 && info.getContentLength() != -1 && freeDiskSpace < info.getContentLength()) {
                 //磁盘空间不足
                 onFailure(new DownloadException("No available space for download"));
                 return;
@@ -125,12 +126,14 @@ public class DownloadTask extends Task<File> {
                 mLocalDownloadTaskModel = new DownloadTaskModel(mTaskId, mRequest, info);
                 mLocalDownloadTaskModel.setStatus(Task.STATUS_RUNNING);
                 mDao.insertDownloadTask(mLocalDownloadTaskModel);
-            } else if (mLocalDownloadTaskModel.getStatus() == Task.STATUS_COMPLETE && targetFile.length() == info.getContentLength()) {
-                //已经下载完成，直接成功
-                Progress progress = Progress.complete(targetFile.length());
-                onProgressChanged(progress);
-                onComplete(targetFile);
-                return;
+            } else if (mLocalDownloadTaskModel.getStatus() == Task.STATUS_COMPLETE) {
+                if (info.getContentLength() == -1 || targetFile.length() == info.getContentLength()) {
+                    //已经下载完成，直接成功
+                    Progress progress = Progress.complete(targetFile.length());
+                    onProgressChanged(progress);
+                    onComplete(targetFile);
+                    return;
+                }
             }
         } catch (Exception e) {
             onFailure(e);
@@ -138,7 +141,7 @@ public class DownloadTask extends Task<File> {
         }
 
         //不分片
-        if (!info.acceptRanges()) {
+        if (!info.acceptRanges() || info.getContentLength() <= 0) {
             mCompleteDownloadTask = doCompleteDownload(info);
             return;
         }
@@ -174,7 +177,7 @@ public class DownloadTask extends Task<File> {
                 if (result) {
                     if (checkDownloadedSegments(segments)) {
                         File file = mergeSegmentFiles(targetFile, segments);
-                        if (file.length() == info.getContentLength()) {
+                        if (info.getContentLength() == -1 || file.length() == info.getContentLength()) {
                             FLog.i("merge " + segments.size() + " segments complete!");
                             Utils.deleteDir(new File(mRequest.getTarget() + DOWNLOAD_SUFFIX));
                             mDao.deleteDownloadSegments(mTaskId);
@@ -290,7 +293,7 @@ public class DownloadTask extends Task<File> {
         info.setUrl(url);
         body = response.body();
         info.setContentType(response.header("Content-Type"));
-        info.setContentLength(Long.parseLong(response.header("Content-Length", "0")));
+        info.setContentLength(body != null ? body.contentLength() : Long.parseLong(response.header("Content-Length", "-1")));
         info.setAcceptRanges(response.header("Accept-Ranges"));
         info.setETag(response.header("eTag"));
         info.setLastModified(response.header("Last-Modified"));
@@ -445,7 +448,7 @@ public class DownloadTask extends Task<File> {
     @Override
     public void setStatus(@TaskStatus int status) {
         super.setStatus(status);
-        FLog.i("file: " + mRequest.getUrl() + ", status: " + Task.statusToString(status));
+        //FLog.i("file: " + mRequest.getUrl() + ", status: " + Task.statusToString(status));
     }
 
     /**
@@ -508,7 +511,7 @@ public class DownloadTask extends Task<File> {
                 //更新数据库进度
                 mDao.updateDownloadTaskProgress(mTaskId, totalPercent);
 
-                FLog.i("onProgressChange, update: " + progress.getUpdate() + ", percent: " + currentPercent);
+                //FLog.i("onProgressChange, update: " + progress.getUpdate() + ", percent: " + currentPercent);
 
                 Progress totalProgress = Progress.obtain();
                 totalProgress.setTotal(fileTotalLength);

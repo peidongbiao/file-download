@@ -1,6 +1,8 @@
 package com.pei.filedownload.exception;
 
-public class DownloadException extends Exception {
+import java.io.IOException;
+
+public class DownloadException extends IOException {
 
 
     public DownloadException() {

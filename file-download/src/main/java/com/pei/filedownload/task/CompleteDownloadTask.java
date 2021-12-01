@@ -7,6 +7,7 @@ import androidx.annotation.NonNull;
 import com.pei.filedownload.Task;
 import com.pei.filedownload.TaskDispatcher;
 import com.pei.filedownload.db.FileTransferDao;
+import com.pei.filedownload.exception.DownloadException;
 import com.pei.filedownload.task.model.ResourceInfo;
 
 import java.io.BufferedInputStream;
@@ -56,12 +57,19 @@ class CompleteDownloadTask extends Task<File> {
 
             doDownload(mDownloadRequest, mDownloadRequest.getUrl(), mTargetFile);
             int status = getStatus();
-            if (status == Task.STATUS_COMPLETE) {
-                onComplete(mTargetFile);
-            } else if (status == Task.STATUS_CANCELED) {
-                onFailure(new Exception("Canceled"));
-            } else if (status == Task.STATUS_PAUSED) {
 
+            if (getStatus() == Task.STATUS_RUNNING) {
+                if (mInfo.getContentLength() == -1 || mInfo.getContentLength() == mTargetFile.length()) {
+                    setStatus(Task.STATUS_COMPLETE);
+                    mDao.updateDownloadTaskProgress(mTaskId, 100);
+                    onComplete(mTargetFile);
+                } else {
+                    onFailure(new DownloadException("Download size is " + mTargetFile.length() + ", expect size is " + mInfo.getContentLength()));
+                }
+            } else if (status == Task.STATUS_CANCELED) {
+                onFailure(new DownloadException("Canceled"));
+            } else if (status == Task.STATUS_PAUSED) {
+                //no paused
             }
         } catch (Exception e) {
             setStatus(Task.STATUS_FAILED);
@@ -73,11 +81,8 @@ class CompleteDownloadTask extends Task<File> {
         Request.Builder builder = new Request.Builder()
                 .get()
                 .url(url);
-//                .addHeader(HttpManager.HEADER_KEY_CONNECT_TIMEOUT, String.valueOf(DownloadTask.SEGMENT_DOWNLOAD_TIMEOUT))
-//                .addHeader(HttpManager.HEADER_KEY_WRITE_TIMEOUT, String.valueOf(DownloadTask.SEGMENT_DOWNLOAD_TIMEOUT))
-//                .addHeader(HttpManager.HEADER_KEY_READ_TIMEOUT, String.valueOf(DownloadTask.SEGMENT_DOWNLOAD_TIMEOUT))
-//                //日志拦截器不记录body
-//                .addHeader(HttpFileLogInterceptor.HEADER_IGNORE_RESPONSE_BODY, "true");
+                //日志拦截器不记录body
+                //.addHeader(HttpFileLogInterceptor.HEADER_IGNORE_RESPONSE_BODY, "true");
         if (request.getHeaders() != null) {
             for (Map.Entry<String, String> entry : request.getHeaders().entrySet()) {
                 builder.addHeader(entry.getKey(), entry.getValue());
@@ -97,26 +102,32 @@ class CompleteDownloadTask extends Task<File> {
             bos.write(buffer, 0, read);
             length += read;
             update += read;
-            int currentPercent = (int) (length * 100 / mInfo.getContentLength());
-            if (currentPercent - percent >= 1) {
-                Progress progress = Progress.obtain();
-                progress.setTotal(mInfo.getContentLength());
-                progress.setCurrent(length);
-                progress.setPercent(currentPercent);
-                progress.setUpdate(update);
-                percent = currentPercent;
-                update = 0;
-                onProgressChanged(progress);
+            if (mInfo.getContentLength() > 0) {     //contentLength可能是-1或0
+                int currentPercent = (int) (length * 100 / mInfo.getContentLength());
+                if (currentPercent - percent >= 1) {
+                    updateProgress(length, currentPercent, update);
+                    percent = currentPercent;
+                    update = 0;
+                }
             }
         }
+
+        if (getStatus() == Task.STATUS_RUNNING && mInfo.getContentLength() <= 0 && percent != 100) {
+            updateProgress(length, 100, length);
+        }
+
         bos.flush();
         bos.close();
         bis.close();
-        if (getStatus() == Task.STATUS_RUNNING) {
-            setStatus(Task.STATUS_COMPLETE);
-            mDao.updateDownloadTaskProgress(mTaskId, 100);
-            //mDao.updateDownloadTaskStatus(mTaskId, Task.STATUS_COMPLETE);
-        }
+    }
+
+    private void updateProgress(long current, int percent, long update) {
+        Progress progress = Progress.obtain();
+        progress.setTotal(mInfo.getContentLength());
+        progress.setCurrent(current);
+        progress.setPercent(percent);
+        progress.setUpdate(update);
+        onProgressChanged(progress);
     }
 
     /**
